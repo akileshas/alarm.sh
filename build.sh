@@ -2,9 +2,7 @@
 
 set -euo pipefail
 
-# shellcheck disable=SC2155,SC1091
 readonly OS="$(. /etc/os-release 2>/dev/null && echo "${ID}" || echo "unknown")"
-# shellcheck disable=SC2034
 readonly FZF_DEFAULT_OPTS=""
 readonly FZF_PROMPT=">>> disk to install archlinuxarm: "
 readonly FZF_WRAP_SIGN="↪ "
@@ -13,9 +11,7 @@ readonly LOGGER_GREEN_SHADE="\033[0;32m"
 readonly LOGGER_NOCOLOR_SHADE="\033[0m"
 readonly LOGGER_RED_SHADE="\033[0;31m"
 readonly LOGGER_YELLOW_SHADE="\033[1;33m"
-# shellcheck disable=SC2034,SC2155
 readonly SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-# shellcheck disable=SC2155
 readonly SCRIPT_NAME="$(basename "${0}")"
 readonly ARCHLINUXARM="http://os.archlinuxarm.org/os/ArchLinuxARM-rpi-aarch64-latest.tar.gz"
 readonly LINUX_RPI_REPO="http://mirror.archlinuxarm.org/aarch64/core/"
@@ -23,13 +19,15 @@ readonly DOWNLOAD_DIR="/tmp/archlinuxarm"
 readonly LINUX_RPI_DIR="${DOWNLOAD_DIR}/linux-rpi"
 readonly LINUX_RPI_APK_DIR="${LINUX_RPI_DIR}/apk"
 readonly LINUX_RPI_EXTRACT_DIR="${LINUX_RPI_DIR}/extract"
-readonly ROOTFS="${DOWNLOAD_DIR}/ArchLinuxARM-rpi-aarch64-latest.tar.gz"
+readonly ROOTFS_PKG="ArchLinuxARM-rpi-aarch64-latest.tar.gz"
+readonly ROOTFS="${DOWNLOAD_DIR}/${ROOTFS_PKG}"
 readonly MOUNTPOINT="/mnt/alarm"
 
 DISK_DEV=""
 DISK_PART_BOOT=""
 DISK_PART_ROOT=""
 LINUX_RPI=""
+LINUX_RPI_PKG=""
 LINUX_RPI_APK=""
 LINUX_RPI_APK_EXTRACT=""
 
@@ -267,10 +265,10 @@ __M.util.get_disk () {
                  --height=25 \
                  --border \
                  --wrap \
-                 --preview "
-                     disk=\$(echo {} | sed -E \"s/^\[ *([^ ]+) *\].*/\1/\")
-                     lsblk -o NAME,MAJ:MIN,RM,SIZE,RO,TYPE,MOUNTPOINTS \"/dev/\$disk\"
-                 ")
+                 --preview '
+                     disk=$(echo {} | sed -E "s/^\[ *([^ ]+) *\].*/\1/")
+                     lsblk -o NAME,MAJ:MIN,RM,SIZE,RO,TYPE,MOUNTPOINTS "/dev/$disk"
+                 ')
     if [[ -n "${choice}" ]]; then
         disk=$(echo "${choice}" | awk -F'[][]' '{print $2}' | xargs)
         echo "/dev/${disk}"
@@ -329,7 +327,6 @@ __M.util.cleanup () {
     __logger.info "cleaning up ... done."
 }
 
-# shellcheck disable=SC2120
 __M.install.setup () {
     local standalone_call=false
     while [[ $# -gt 0 ]]; do
@@ -359,11 +356,11 @@ __M.install.setup () {
     __logger.info "root partition: ${DISK_PART_ROOT}."
     __logger.info "creating download directory ..."
     if ! mkdir -p "${DOWNLOAD_DIR}"; then
-        __logger.error "failed to create download directory: ${DOWNLOAD_DIR}"
+        __logger.error "failed to create download directory: ${DOWNLOAD_DIR}."
         return 1
     fi
     __logger.info "creating download directory ... done."
-    if [[ -f "${ROOTFS}" && -s "/${ROOTFS}" ]]; then
+    if [[ -f "${ROOTFS}" && -s "${ROOTFS}" ]]; then
         __logger.info "found cached rootfs: ${ROOTFS} ($(du -h "${ROOTFS}" | cut -f1))"
         if bsdtar -tf "${ROOTFS}" &>/dev/null; then
             local confirm
@@ -392,7 +389,8 @@ __M.install.setup () {
     if [[ ! -f "${ROOTFS}" ]]; then
         __logger.info "downloading archlinuxarm ..."
         if ! ( aria2c -x 16 -s 16 -k 1M \
-                -o "${ROOTFS}" \
+                --dir="${DOWNLOAD_DIR}" \
+                -o "${ROOTFS_PKG}" \
                 "${ARCHLINUXARM}" ); then
             __logger.error "failed to download archlinuxarm."
             return 1
@@ -451,7 +449,7 @@ __M.install.setup () {
     __logger.info "formatting root partition ... done."
     __logger.info "creating root mount directory ..."
     if ! sudo mkdir -p "${MOUNTPOINT}"; then
-        __logger.error "failed to create root mount directory: ${MOUNTPOINT}"
+        __logger.error "failed to create root mount directory: ${MOUNTPOINT}."
         return 1
     fi
     __logger.info "creating root mount directory ... done."
@@ -463,7 +461,7 @@ __M.install.setup () {
     __logger.info "mounting root partition ... done."
     __logger.info "creating boot mount directory ..."
     if ! sudo mkdir -p "${MOUNTPOINT}/boot"; then
-        __logger.error "failed to create boot mount directory."
+        __logger.error "failed to create boot mount directory: ${MOUNTPOINT}/boot."
         __M.util.cleanup
         return 1
     fi
@@ -496,18 +494,19 @@ __M.install.setup () {
         return 1
     fi
     __logger.info "creating linux-rpi directories ... done."
-    LINUX_RPI="$(__M.util.get_linux_rpi)"
-    if [[ "${LINUX_RPI}" == "none" ]]; then
+    LINUX_RPI_PKG="$(__M.util.get_linux_rpi)"
+    LINUX_RPI="${LINUX_RPI_PKG%.pkg.tar.xz}"
+    if [[ "${LINUX_RPI_PKG}" == "none" ]]; then
         __logger.error "no linux-rpi packages found at '${LINUX_RPI_REPO}'."
         __M.util.cleanup
         return 1
     fi
-    LINUX_RPI_APK="${LINUX_RPI_APK_DIR}/${LINUX_RPI}"
+    LINUX_RPI_APK="${LINUX_RPI_APK_DIR}/${LINUX_RPI_PKG}"
     if [[ -f "${LINUX_RPI_APK}" && -s "${LINUX_RPI_APK}" ]]; then
-        __logger.info "found cached linux-rpi kernel package: ${LINUX_RPI}."
+        __logger.info "found cached linux-rpi kernel package: ${LINUX_RPI_PKG}."
         if tar -tf "${LINUX_RPI_APK}" &>/dev/null; then
             local confirm
-            read -rp ">>> use cached linux-rpi kernel package '${LINUX_RPI}'? [y/N]: " confirm
+            read -rp ">>> use cached linux-rpi kernel package '${LINUX_RPI_PKG}'? [y/N]: " confirm
             confirm="${confirm,,}"
             if [[ "${confirm}" == "y" || "${confirm}" == "yes" ]]; then
                 __logger.info "using cached linux-rpi kernel package."
@@ -534,8 +533,9 @@ __M.install.setup () {
     if [[ ! -f "${LINUX_RPI_APK}" ]]; then
         __logger.info "downloading linux-rpi kernel ..."
         if ! ( aria2c -x 16 -s 16 -k 1M \
-                -o "${LINUX_RPI_APK}" \
-                "${LINUX_RPI_REPO}/${LINUX_RPI}" ); then
+                --dir="${LINUX_RPI_APK_DIR}" \
+                -o "${LINUX_RPI_PKG}" \
+                "${LINUX_RPI_REPO}/${LINUX_RPI_PKG}" ); then
             __logger.error "failed to download linux-rpi kernel."
             __M.util.cleanup
             return 1
@@ -543,10 +543,9 @@ __M.install.setup () {
         __logger.info "downloading linux-rpi kernel ... done."
     fi
     LINUX_RPI_APK_EXTRACT="${LINUX_RPI_EXTRACT_DIR}/${LINUX_RPI}"
-    __logger.info "creating extracting directory ... "
-    if [[ -d "${LINUX_RPI_APK_EXTRACT}" && -d "${LINUX_RPI_APK_EXTRACT}/boot" ]]; then
+    if [[ -d "${LINUX_RPI_APK_EXTRACT}/boot" ]]; then
         __logger.info "found extracted linux-rpi kernel '/boot' directory."
-        if ls "${LINUX_RPI_APK_EXTRACT}/boot/kernel*.img" &>/dev/null; then
+        if ls "${LINUX_RPI_APK_EXTRACT}/boot/"kernel*.img &>/dev/null; then
             local confirm
             read -rp ">>> use cached extracted kernel (boot/)? [y/N]: " confirm
             confirm="${confirm,,}"
@@ -572,7 +571,15 @@ __M.install.setup () {
             __logger.info "discarding cache ... done."
         fi
     fi
-    if [[ ! -d "${LINUX_RPI_APK_EXTRACT}" ]]; then
+    if [[ ! -d "${LINUX_RPI_APK_EXTRACT}"
+            || -z "$(find "${LINUX_RPI_APK_EXTRACT}" -mindepth 1 -print -quit 2>/dev/null)" ]]; then
+        __logger.info "creating extracting directory ..."
+        if ! mkdir -p "${LINUX_RPI_APK_EXTRACT}"; then
+            __logger.error "failed to create extract directory: ${LINUX_RPI_APK_EXTRACT}."
+            __M.util.cleanup
+            return 1
+        fi
+        __logger.info "creating extracting directory ... done."
         __logger.info "extracting linux-rpi kernel package ..."
         if ! tar xf "${LINUX_RPI_APK}" -C "${LINUX_RPI_APK_EXTRACT}"; then
             __logger.error "failed to extract linux-rpi kernel package."
@@ -581,15 +588,16 @@ __M.install.setup () {
         fi
         __logger.info "extracting linux-rpi kernel package ... done."
     fi
-    local kernel
-    kernel=$(find "${LINUX_RPI_APK_EXTRACT}/boot" -maxdepth 1 -type f -name "kernel*.img" | head -n1)
-    if [[ -z "${kernel}" ]]; then
+    local kernels
+    mapfile -t kernels < <(find "${LINUX_RPI_APK_EXTRACT}/boot" -maxdepth 1 -type f -name "kernel*.img" 2>/dev/null)
+    if [[ ${#kernels[@]} -eq 0 ]]; then
         __logger.error "no kernel*.img found in extracted linux-rpi kernel package."
         __M.util.cleanup
         return 1
     fi
+    __logger.info "found kernels : ${kernels[*]}"
     __logger.info "copying kernel image ..."
-    if ! sudo cp -rf "${LINUX_RPI_APK_EXTRACT}/boot/*" "${MOUNTPOINT}/boot/"; then
+    if ! sudo cp -rf "${LINUX_RPI_APK_EXTRACT}/boot/"* "${MOUNTPOINT}/boot/"; then
         __logger.error "failed to copy kernel image."
         __M.util.cleanup
         return 1
@@ -598,7 +606,7 @@ __M.install.setup () {
     __logger.info "syncing filesystems ..."
     if ! sync; then
         __logger.error "failed to sync filesystems."
-        __M.util.cleanup "$@"
+        __M.util.cleanup
         return 1
     fi
     __logger.info "syncing filesystems ... done."
@@ -731,7 +739,6 @@ _M.export.init () {
 _M.export.install () {
     __logger.info "installing archlinuxarm ..."
     if [[ $# -eq 0 ]]; then
-        # shellcheck disable=SC2119
         __M.install.setup
         __logger.info "installing archlinuxarm ... done. [ʘ‿ʘ]"
         return 0
@@ -739,7 +746,6 @@ _M.export.install () {
     while [[ $# -gt 0 ]]; do
         case "${1}" in
             --setup)
-                # shellcheck disable=SC2119
                 __M.install.setup
                 shift
                 ;;
