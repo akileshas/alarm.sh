@@ -54,7 +54,8 @@ __logger.err () {
 }
 
 __util.ping () {
-    local host="${1}"
+    local host
+    host="${1}"
     if ping -c 1 -W 1 "${host}" &>/dev/null; then
         return 0
     else
@@ -63,9 +64,10 @@ __util.ping () {
 }
 
 __util.is_excluded () {
-    local item="${1}"
-    shift
+    local item
     local exclude
+    item="${1}"
+    shift
     for exclude in "$@"; do
         if [[ "${exclude}" == "${item}" ]]; then
             return 0
@@ -75,8 +77,9 @@ __util.is_excluded () {
 }
 
 __util.install () {
-    local pkg="${1}"
+    local pkg
     local confirm
+    pkg="${1}"
     read -rp "${INPUT_SIGN} do you want to install '${pkg}'? [y/N]: " confirm
     confirm="${confirm,,}"
     if [[ "${confirm}" == "y" || "${confirm}" == "yes" ]]; then
@@ -96,7 +99,8 @@ __util.install () {
 
 __M.util.get_disk () {
     local disk
-    local choice=$(lsblk -dno NAME,SIZE \
+    local choice
+    choice=$(lsblk -dno NAME,SIZE \
                  | awk '{
                      name=$1; size=$2
                      name_w=9; size_w=8
@@ -132,12 +136,12 @@ __M.util.get_disk () {
 }
 
 __M.util.get_linux_rpi_pkg () {
+    local pkgs
     local response
     if ! response=$(curl -fsSL "${LINUX_RPI_REPO}" 2>/dev/null); then
         __logger.err "failed to fetch index from '${LINUX_RPI_REPO}'."
         return 1
     fi
-    local pkgs
     pkgs=$(echo "${response}" \
          | grep -oE "linux-rpi-[0-9]+\.[0-9]+\.[0-9]+-[0-9]+-aarch64\.pkg\.tar\.[gx]z" \
          | sort -V \
@@ -153,11 +157,13 @@ __M.util.get_linux_rpi_pkg () {
 }
 
 __M.util.cleanup () {
-    local -a exclude_list=()
+    local value
+    local -a exclude_list
+    exclude_list=()
     while [[ $# -gt 0 ]]; do
         case "${1}" in
             --exclude=*)
-                local value="${1#--exclude=}"
+                value="${1#--exclude=}"
                 if [[ -n "${value}" ]]; then
                     IFS=',' read -ra exclude_list <<< "${value}"
                 fi
@@ -181,12 +187,15 @@ __M.util.cleanup () {
 }
 
 __M.checker.sys () {
-    local standalone_call=false
-    local -a exclude_list=()
+    local value
+    local standalone_call
+    local -a exclude_list
+    standalone_call=false
+    exclude_list=()
     while [[ $# -gt 0 ]]; do
         case "${1}" in
             --exclude=*)
-                local value="${1#--exclude=}"
+                value="${1#--exclude=}"
                 if [[ -n "${value}" ]]; then
                     IFS=',' read -ra exclude_list <<< "${value}"
                 fi
@@ -255,7 +264,11 @@ __M.checker.sys () {
 }
 
 __M.checker.pkgs () {
-    local standalone_call=false
+    local pkg
+    local bin
+    local standalone_call
+    local -A requirements
+    standalone_call=false
     while [[ $# -gt 0 ]]; do
         case "${1}" in
             --standalone-call)
@@ -268,7 +281,7 @@ __M.checker.pkgs () {
                 ;;
         esac
     done
-    local -A requirements=(
+    requirements=(
         ["aria2c"]="aria2"
         ["fzf"]="fzf"
         ["mkfs.vfat"]="dosfstools"
@@ -291,9 +304,8 @@ __M.checker.pkgs () {
     if [[ "${standalone_call}" == true ]]; then
         __logger.log "checking package requirements ..."
     fi
-    local bin
     for bin in "${!requirements[@]}"; do
-        local pkg="${requirements[${bin}]}"
+        pkg="${requirements[${bin}]}"
         if command -v "${bin}" &>/dev/null; then
             __logger.info "\b(pkgs)(${bin}) check: passed."
         else
@@ -315,7 +327,10 @@ __M.checker.pkgs () {
 }
 
 __M.installer.setup () {
-    local standalone_call=false
+    local confirm
+    local standalone_call
+    local -a kernels
+    standalone_call=false
     while [[ $# -gt 0 ]]; do
         case "${1}" in
             --standalone-call)
@@ -356,7 +371,6 @@ __M.installer.setup () {
     if [[ -f "${ARCHLINUXARM_FS}" && -s "${ARCHLINUXARM_FS}" ]]; then
         __logger.warn "found cached archlinuxarm filesystem: '${ARCHLINUXARM_FS}' ($(du -h "${ARCHLINUXARM_FS}" | cut -f1))."
         if bsdtar -tf "${ARCHLINUXARM_FS}" &>/dev/null; then
-            local confirm
             read -rp "${INPUT_SIGN} use cached archlinuxarm filesystem? [y/N]: " confirm
             confirm="${confirm,,}"
             if [[ "${confirm}" == "y" || "${confirm}" == "yes" ]]; then
@@ -403,7 +417,6 @@ __M.installer.setup () {
         __logger.log "getting sudo access ... done."
     fi
     __logger.warn "disk selected: ${DISK_DEV}."
-    local confirm
     read -rp "${INPUT_SIGN} wipe this disk and create new partition table? [y/N]: " confirm
     confirm="${confirm,,}"
     if [[ "${confirm}" != "y" && "${confirm}" != "yes" ]]; then
@@ -498,7 +511,6 @@ __M.installer.setup () {
     if [[ -f "${LINUX_RPI_KERNEL}" && -s "${LINUX_RPI_KERNEL}" ]]; then
         __logger.warn "found cached linux-rpi kernel package: '${LINUX_RPI_PKG}'."
         if tar -tf "${LINUX_RPI_KERNEL}" &>/dev/null; then
-            local confirm
             read -rp "${INPUT_SIGN} use cached linux-rpi kernel package? [y/N]: " confirm
             confirm="${confirm,,}"
             if [[ "${confirm}" == "y" || "${confirm}" == "yes" ]]; then
@@ -539,7 +551,6 @@ __M.installer.setup () {
         __logger.warn "found cached extracted linux-rpi kernel '/boot' directory."
         if ls "${LINUX_RPI_KERNEL_EXTRACT}/boot/"kernel*.img &>/dev/null; then
             __logger.warn "found cached extracted linux-rpi kernel image."
-            local confirm
             read -rp "${INPUT_SIGN} use cached extracted kernel image? [y/N]: " confirm
             confirm="${confirm,,}"
             if [[ "${confirm}" == "y" || "${confirm}" == "yes" ]]; then
@@ -581,7 +592,6 @@ __M.installer.setup () {
         fi
         __logger.log "extracting linux-rpi kernel package ... done."
     fi
-    local -a kernels
     mapfile -t kernels < <(find "${LINUX_RPI_KERNEL_EXTRACT}/boot" -maxdepth 1 -type f -name "kernel*.img" 2>/dev/null)
     if [[ ${#kernels[@]} -eq 0 ]]; then
         __logger.err "no kernel image found in extracted linux-rpi kernel package."
@@ -615,7 +625,10 @@ __M.installer.setup () {
 }
 
 __M.installer.post () {
-    local standalone_call=false
+    local confirm
+    local standalone_call
+    local -a conflicts
+    standalone_call=false
     while [[ $# -gt 0 ]]; do
         case "${1}" in
             --standalone-call)
@@ -652,7 +665,7 @@ __M.installer.post () {
     fi
     __logger.log "populating pacman keyring with 'archlinuxarm' keys ... done."
     __logger.log "checking for conflicting packages ..."
-    local -a conflicts=()
+    conflicts=()
     if pacman -Q linux-aarch64 &>/dev/null; then
         conflicts+=("linux-aarch64")
     fi
@@ -664,7 +677,6 @@ __M.installer.post () {
         __logger.log "no conflicting packages found."
     else
         __logger.warn "conflicting packages detected: $(printf "'%s', " "${conflicts[@]}" | sed 's/, $//')."
-        local confirm
         read -rp "${INPUT_SIGN} remove the conflict packages [y/N]: " confirm
         confirm="${confirm,,}"
         if [[ "${confirm}" == "y" || "${confirm}" == "yes" ]]; then
@@ -710,6 +722,13 @@ _M.export.init () {
 }
 
 _M.export.check () {
+    local only_sys
+    local only_pkgs
+    local skip_pkgs
+    local exclude_items
+    local filtered_exclude_string
+    local -a exclude_list
+    local -a filtered_exclude_list
     if [[ $# -eq 0 ]]; then
         __logger.log "checking requirements ..."
         __M.checker.sys --exclude="user"
@@ -717,10 +736,10 @@ _M.export.check () {
         __logger.log "checking requirements ... done."
         return 0
     fi
-    local only_pkgs=false
-    local only_sys=false
-    local exclude_items=""
-    local skip_pkgs=false
+    only_pkgs=false
+    only_sys=false
+    exclude_items=""
+    skip_pkgs=false
     while [[ $# -gt 0 ]]; do
         case "${1}" in
             --exclude=*)
@@ -742,8 +761,8 @@ _M.export.check () {
         esac
     done
     if [[ -n "${exclude_items}" ]]; then
-        local -a exclude_list=()
-        local -a filtered_exclude_list=()
+        exclude_list=()
+        filtered_exclude_list=()
         IFS=',' read -ra exclude_list <<< "${exclude_items}"
         for item in "${exclude_list[@]}"; do
             if [[ "${item}" == "pkgs" ]]; then
@@ -753,7 +772,6 @@ _M.export.check () {
             fi
         done
         if [[ ${#filtered_exclude_list[@]} -gt 0 ]]; then
-            local filtered_exclude_string
             printf -v filtered_exclude_string '%s,' "${filtered_exclude_list[@]}"
             exclude_items="${filtered_exclude_string%,}"
         else
