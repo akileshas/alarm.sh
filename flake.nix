@@ -1,5 +1,5 @@
 {
-  description = "Install ArchLinux ARM in Raspberry Pi 5";
+  description = "Install ArchLinux ARM in Raspberry Pi";
   inputs.nixpkgs.url = "github:NixOS/nixpkgs/nixos-unstable";
   outputs = { self, nixpkgs, ... }:
     let
