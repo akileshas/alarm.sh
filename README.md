@@ -2,7 +2,7 @@
 
 ### usage (bash)
 
-```sh
+```bash
 bash alarm.sh help              # get help
 bash alarm.sh check             # check all requirements
 bash alarm.sh install           # install archlinuxarm
@@ -11,7 +11,7 @@ bash alarm.sh install --post    # post-install setup
 
 ### usage (nix)
 
-```sh
+```bash
 nix develop
 alarm help                      # get help
 alarm check                     # check requirements
