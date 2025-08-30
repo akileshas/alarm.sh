@@ -328,6 +328,7 @@ __M.checker.pkgs () {
 
 __M.installer.setup () {
     local confirm
+    local size_info
     local standalone_call
     local -a kernels
     standalone_call=false
@@ -369,7 +370,8 @@ __M.installer.setup () {
     fi
     __logger.log "creating apk directory ... done."
     if [[ -f "${ARCHLINUXARM_FS}" && -s "${ARCHLINUXARM_FS}" ]]; then
-        __logger.warn "found cached archlinuxarm filesystem: '${ARCHLINUXARM_FS}' ($(du -h "${ARCHLINUXARM_FS}" | cut -f1))."
+        size_info=$(du -h "${ARCHLINUXARM_FS}" | cut -f1)
+        __logger.warn "found cached archlinuxarm filesystem: '${ARCHLINUXARM_FS}' (${size_info})."
         if bsdtar -tf "${ARCHLINUXARM_FS}" &>/dev/null; then
             read -rp "${INPUT_SIGN} use cached archlinuxarm filesystem? [y/N]: " confirm
             confirm="${confirm,,}"
